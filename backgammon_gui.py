@@ -170,8 +170,39 @@ def draw_board(canvas, env, selected_point=None, valid_destinations=None):
         elif count_white and count_red:
             draw_checkers(canvas, center_x - 10, coords, count_white, PLAYER1_COLOR)
             draw_checkers(canvas, center_x + 10, coords, count_red, PLAYER2_COLOR)
-    return triangles_bbox
-
+             
+    # --- Ajout des zones de borne off ---
+    # On part du principe que chaque joueur commence avec 15 pions.
+    import numpy as np
+    borne_off_j1 = 15 - int(np.sum(env.board[:, 0]))
+    borne_off_j2 = 15 - int(np.sum(env.board[:, 1]))
+    
+    # Pour Joueur 1 (borne off, destination interne = 0)
+    off_width, off_height = 80, 80
+    off_x1 = CANVAS_WIDTH - off_width - 10 + 30
+    off_y1 = CANVAS_HEIGHT - off_height - 10
+    off_x2 = CANVAS_WIDTH - 10 + 30
+    off_y2 = CANVAS_HEIGHT - 10
+    canvas.create_rectangle(off_x1, off_y1, off_x2, off_y2, fill=PLAYER1_COLOR, outline="black", width=2)
+    canvas.create_text((off_x1+off_x2)/2, (off_y1+off_y2)/2, text=str(borne_off_j1), font=("Arial", 20, "bold"))
+    canvas.create_text((off_x1+off_x2)/2, off_y1 - 15, text="1", font=("Arial", 14, "bold"))
+    
+    # Pour Joueur 2 (borne off, destination interne = 25)
+    off_x1_2 = CANVAS_WIDTH - off_width - 10 + 35
+    off_y1_2 = 10
+    off_x2_2 = CANVAS_WIDTH - 10 +35
+    off_y2_2 = 10 + off_height
+    canvas.create_rectangle(off_x1_2, off_y1_2, off_x2_2, off_y2_2, fill=PLAYER2_COLOR, outline="black", width=2)
+    canvas.create_text((off_x1_2+off_x2_2)/2, (off_y1_2+off_y2_2)/2, text=str(borne_off_j2), font=("Arial", 20, "bold"))
+    canvas.create_text((off_x1_2+off_x2_2)/2, off_y2_2 + 15, text="25", font=("Arial", 14, "bold"))
+    
+    # Enregistrement des bounding boxes pour la sélection
+    bearing_off_boxes = {}
+    bearing_off_boxes[0] = (off_x1, off_y1, off_x2, off_y2)   # Pour Joueur 1
+    bearing_off_boxes[25] = (off_x1_2, off_y1_2, off_x2_2, off_y2_2)  # Pour Joueur 2
+    
+    # Retourner les coordonnées des triangles et des zones de borne off
+    return triangles_bbox, bearing_off_boxes
 #------------------------------ACTION BUTTON PART
 class BackgammonGUI:
     def __init__(self, env):
@@ -230,7 +261,8 @@ class BackgammonGUI:
         self.valid_moves = self.env.valid_moves(self.remaining_dice)
 
     def redraw(self):
-        self.triangles_bbox = draw_board(self.canvas, self.env, self.selected_point, self.valid_destinations)
+        self.triangles_bbox, self.bearing_off_boxes = draw_board(self.canvas, self.env, self.selected_point, self.valid_destinations)
+
 
     def update_history(self):
         self.history_text.config(state="normal")
@@ -263,11 +295,18 @@ class BackgammonGUI:
         self.redraw()
 
     def point_from_click(self, x, y):
+    # Vérification d'abord sur les triangles
         for point, data in self.triangles_bbox.items():
             x1, y1, x2, y2 = data["bbox"]
             if x1 <= x <= x2 and y1 <= y <= y2:
                 return point
+    # Puis vérifier si le clic est sur une zone de borne off
+        for borne, bbox in self.bearing_off_boxes.items():
+            bx1, by1, bx2, by2 = bbox
+            if bx1 <= x <= bx2 and by1 <= y <= by2:
+                 return borne  # renvoie 0 ou 25 suivant le cas
         return None
+
 
     def on_canvas_click(self, event):
         # Ne pas traiter les clics si aucun dé n'a été lancé

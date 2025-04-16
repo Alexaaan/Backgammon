@@ -75,7 +75,7 @@ class BackgammonGUI_AI:
         # Si c'est le tour de l'IA, lancer l'IA après un court délai
         if self.env.current_player == 1:
             self.root.after(1000, self.ai_move)
-
+            
     def update_valid_moves(self):
         self.valid_moves = self.env.valid_moves(self.remaining_dice)
         self.moves_listbox.delete(0, tk.END)
