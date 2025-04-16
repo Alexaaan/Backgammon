@@ -148,21 +148,20 @@ def draw_board(canvas, env, selected_point=None, valid_destinations=None):
     """
     canvas.delete("all")
     canvas.config(bg=BOARD_BG_COLOR)
-    
+
+    # Bar central
     bar_x1 = (CANVAS_WIDTH - BAR_WIDTH) / 2
     bar_x2 = bar_x1 + BAR_WIDTH
     canvas.create_rectangle(bar_x1, 0, bar_x2, CANVAS_HEIGHT, fill=BAR_COLOR, outline=BAR_COLOR)
-    
+
     triangles_bbox = {}
     for point in range(1, 25):
-        hl = False
-        if selected_point == point or (valid_destinations and point in valid_destinations):
-            hl = True
+        hl = selected_point == point or (valid_destinations and point in valid_destinations)
         center_x, coords, bbox = draw_triangle(canvas, point, highlight=hl)
         triangles_bbox[point] = {"coords": coords, "center_x": center_x, "bbox": bbox}
         idx = point - 1
         count_white = int(env.board[idx, 0])
-        count_red   = int(env.board[idx, 1])
+        count_red = int(env.board[idx, 1])
         if count_white and not count_red:
             draw_checkers(canvas, center_x, coords, count_white, PLAYER1_COLOR)
         elif count_red and not count_white:
@@ -170,39 +169,56 @@ def draw_board(canvas, env, selected_point=None, valid_destinations=None):
         elif count_white and count_red:
             draw_checkers(canvas, center_x - 10, coords, count_white, PLAYER1_COLOR)
             draw_checkers(canvas, center_x + 10, coords, count_red, PLAYER2_COLOR)
-             
-    # --- Ajout des zones de borne off ---
-    # On part du principe que chaque joueur commence avec 15 pions.
-    import numpy as np
-    borne_off_j1 = 15 - int(np.sum(env.board[:, 0]))
-    borne_off_j2 = 15 - int(np.sum(env.board[:, 1]))
-    
-    # Pour Joueur 1 (borne off, destination interne = 0)
+
+    # Déplacement des zones de borne off tout à droite
     off_width, off_height = 80, 80
-    off_x1 = CANVAS_WIDTH - off_width - 10 + 30
+    offset_right = 100  # Plus gros décalage
+
+    import numpy as np
+    borne_off_j1 = 15 - int(np.sum(env.board[:, 0])) - env.bar[0]
+    borne_off_j2 = 15 - int(np.sum(env.board[:, 1])) - env.bar[1]
+
+    # Joueur 1 (blanc) : sortie en bas droite
+    off_x1 = CANVAS_WIDTH + offset_right
     off_y1 = CANVAS_HEIGHT - off_height - 10
-    off_x2 = CANVAS_WIDTH - 10 + 30
+    off_x2 = off_x1 + off_width
     off_y2 = CANVAS_HEIGHT - 10
     canvas.create_rectangle(off_x1, off_y1, off_x2, off_y2, fill=PLAYER1_COLOR, outline="black", width=2)
-    canvas.create_text((off_x1+off_x2)/2, (off_y1+off_y2)/2, text=str(borne_off_j1), font=("Arial", 20, "bold"))
-    canvas.create_text((off_x1+off_x2)/2, off_y1 - 15, text="1", font=("Arial", 14, "bold"))
-    
-    # Pour Joueur 2 (borne off, destination interne = 25)
-    off_x1_2 = CANVAS_WIDTH - off_width - 10 + 35
+    canvas.create_text((off_x1 + off_x2)/2, (off_y1 + off_y2)/2, text=str(borne_off_j1), font=("Arial", 20, "bold"))
+    canvas.create_text((off_x1 + off_x2)/2, off_y1 - 15, text="1", font=("Arial", 14, "bold"))
+
+    # Joueur 2 (rouge) : sortie en haut droite
+    off_x1_2 = CANVAS_WIDTH + offset_right
     off_y1_2 = 10
-    off_x2_2 = CANVAS_WIDTH - 10 +35
+    off_x2_2 = off_x1_2 + off_width
     off_y2_2 = 10 + off_height
     canvas.create_rectangle(off_x1_2, off_y1_2, off_x2_2, off_y2_2, fill=PLAYER2_COLOR, outline="black", width=2)
-    canvas.create_text((off_x1_2+off_x2_2)/2, (off_y1_2+off_y2_2)/2, text=str(borne_off_j2), font=("Arial", 20, "bold"))
-    canvas.create_text((off_x1_2+off_x2_2)/2, off_y2_2 + 15, text="25", font=("Arial", 14, "bold"))
-    
-    # Enregistrement des bounding boxes pour la sélection
-    bearing_off_boxes = {}
-    bearing_off_boxes[0] = (off_x1, off_y1, off_x2, off_y2)   # Pour Joueur 1
-    bearing_off_boxes[25] = (off_x1_2, off_y1_2, off_x2_2, off_y2_2)  # Pour Joueur 2
-    
-    # Retourner les coordonnées des triangles et des zones de borne off
-    return triangles_bbox, bearing_off_boxes
+    canvas.create_text((off_x1_2 + off_x2_2)/2, (off_y1_2 + off_y2_2)/2, text=str(borne_off_j2), font=("Arial", 20, "bold"))
+    canvas.create_text((off_x1_2 + off_x2_2)/2, off_y2_2 + 15, text="25", font=("Arial", 14, "bold"))
+
+    # Pions sur la barre
+    bar_center_x = (bar_x1 + bar_x2) / 2
+    if env.bar[0] > 0:
+        start_y = CANVAS_HEIGHT - CHECKER_RADIUS - 5
+        for i in range(env.bar[0]):
+            y = start_y - i * (CHECKER_RADIUS * 2 + 5)
+            canvas.create_oval(bar_center_x - CHECKER_RADIUS, y - CHECKER_RADIUS,
+                               bar_center_x + CHECKER_RADIUS, y + CHECKER_RADIUS,
+                               fill=PLAYER1_COLOR, outline="black", width=2)
+    if env.bar[1] > 0:
+        start_y = CHECKER_RADIUS + 5
+        for i in range(env.bar[1]):
+            y = start_y + i * (CHECKER_RADIUS * 2 + 5)
+            canvas.create_oval(bar_center_x - CHECKER_RADIUS, y - CHECKER_RADIUS,
+                               bar_center_x + CHECKER_RADIUS, y + CHECKER_RADIUS,
+                               fill=PLAYER2_COLOR, outline="black", width=2)
+
+    bearing_off_boxes = {
+        0: (off_x1, off_y1, off_x2, off_y2),
+        25: (off_x1_2, off_y1_2, off_x2_2, off_y2_2)
+    }
+
+    return triangles_bbox, bearing_off_boxes  
 #------------------------------ACTION BUTTON PART
 class BackgammonGUI:
     def __init__(self, env):
@@ -295,35 +311,58 @@ class BackgammonGUI:
         self.redraw()
 
     def point_from_click(self, x, y):
-    # Vérification d'abord sur les triangles
+        # 1. Vérifier d'abord sur les triangles
         for point, data in self.triangles_bbox.items():
             x1, y1, x2, y2 = data["bbox"]
             if x1 <= x <= x2 and y1 <= y <= y2:
                 return point
-    # Puis vérifier si le clic est sur une zone de borne off
+
+        # 2. Vérifier la zone de borne off
         for borne, bbox in self.bearing_off_boxes.items():
             bx1, by1, bx2, by2 = bbox
             if bx1 <= x <= bx2 and by1 <= y <= by2:
-                 return borne  # renvoie 0 ou 25 suivant le cas
+                return borne  # renvoie 0 ou 25 selon la borne off
+
+        # 3. Vérifier si le clic se situe dans la zone du bar
+        # Les coordonnées horizontales du bar sont définies par :
+        bar_x1 = (CANVAS_WIDTH - BAR_WIDTH) / 2
+        bar_x2 = bar_x1 + BAR_WIDTH
+        if bar_x1 <= x <= bar_x2:
+            # Si le joueur a des pions sur la barre, on renvoie "bar" pour indiquer cette sélection
+            if self.env.bar[self.env.current_player] > 0:
+                return "bar"
         return None
 
 
+
     def on_canvas_click(self, event):
-        # Ne pas traiter les clics si aucun dé n'a été lancé
+            # Ne pas traiter les clics si aucun dé n'a été lancé
         if not self.remaining_dice:
             self.info_label.config(text="Veuillez d'abord lancer les dés.")
             return
-        
+
         point_clicked = self.point_from_click(event.x, event.y)
+        
         if point_clicked is None:
             self.selected_point = None
             self.valid_destinations = []
             self.info_label.config(text="Sélection annulée.")
             self.redraw()
             return
-        
+
+        # Cas particulier pour la barre
+        if point_clicked == "bar":
+            # On sélectionne "bar" pour indiquer que le joueur souhaite réintroduire un pion de la barre
+            self.selected_point = "bar"
+            # Mettre à jour l'info, par exemple :
+            self.info_label.config(text="Pion(s) sur la barre sélectionné(s). Choisissez où réintroduire.")
+            self.redraw()
+            return
+
+        # Pour éviter l'erreur, on ne fait la conversion qu'après le test "bar"
         idx = point_clicked - 1
-        # Pour cet exemple, on considère que c'est le Joueur 1 qui joue si current_player==0, sinon Joueur 2
+
+        # Gestion pour le Joueur 1 (en supposant que c'est le cas)
         if self.env.current_player == 0:
             if self.selected_point is None:
                 if self.env.board[idx, 0] > 0:
@@ -342,7 +381,6 @@ class BackgammonGUI:
                             if die_used in self.remaining_dice:
                                 self.remaining_dice.remove(die_used)
                             else:
-                                # Retrait pour combinaison de dés
                                 for d in sorted(self.remaining_dice, reverse=True):
                                     if die_used - d in self.remaining_dice:
                                         self.remaining_dice.remove(d)
@@ -368,8 +406,7 @@ class BackgammonGUI:
                         self.selected_point = None
                         self.valid_destinations = []
                         self.info_label.config(text="Sélection annulée.")
-        else:
-            # Logique similaire pour Joueur 2, en utilisant l'indice 1 dans board
+        else:  # Logique similaire pour Joueur 2
             if self.selected_point is None:
                 if self.env.board[idx, 1] > 0:
                     self.selected_point = point_clicked

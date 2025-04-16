@@ -6,6 +6,7 @@ class BackgammonEnv:
     def __init__(self):
         self.board = np.zeros((24, 2), dtype=int)
         self.historique = pd.DataFrame(columns=["Joueur", "Départ", "Arrivée", "Dé utilisé"])
+        self.bar = [0, 0]
         self.current_player = 0  # 0 pour Joueur 1, 1 pour Joueur 2
         self.reset()
 
@@ -14,6 +15,7 @@ class BackgammonEnv:
         self.board = np.zeros((24, 2), dtype=int)
         self.board[23, 0], self.board[12, 0], self.board[7, 0], self.board[5, 0] = 2, 5, 3, 5
         self.board[0, 1], self.board[11, 1], self.board[16, 1], self.board[18, 1] = 2, 5, 3, 5
+        self.bar = [0, 0]
         self.current_player = 0
         self.historique = self.historique.iloc[0:0]
         return self.board.copy()
@@ -35,19 +37,37 @@ class BackgammonEnv:
         On considère ici à la fois les mouvements individuels et, si possible, la combinaison des dés.
         """
         moves = []
-        # On parcourt chaque point pour lequel le joueur a un pion
+        # Si le joueur a des pions sur la barre, seuls les mouvements de réintroduction sont autorisés.
+        if self.bar[self.current_player] > 0:
+            moves = []
+            for die in dice:
+                if self.current_player == 0:
+                    # Joueur 1 entre par le camp adverse (points 24 → 19), donc point = 25 - die
+                    point = 25 - die
+                    if point < 19 or point > 24:
+                        continue
+                    if self.board[point - 1, 1] < 2:
+                        moves.append(("bar", point, die))
+                else:
+                    # Joueur 2 entre par points 1 à 6
+                    point = die
+                    if point < 1 or point > 6:
+                        continue
+                    if self.board[point - 1, 0] < 2:
+                        moves.append(("bar", point, die))
+            return list(set(moves))
+
+
+        # Sinon, poursuite de la génération des coups pour chaque pion déjà sur le plateau
         for point in range(24):
             src = point + 1
             if self.current_player == 0 and self.board[point, 0] > 0:
-                # Pour chaque dé individuel
                 for die in dice:
                     target = src - die
                     if target >= 1 and self.board[target - 1, 1] < 2:
                         moves.append((src, target, die))
-                    # Bearing off : si le dé correspond exactement à la case
                     if target <= 0 and die == src:
                         moves.append((src, 0, die))
-                # Possibilité de combiner des dés si plus d'un dé est disponible
                 if len(dice) > 1:
                     total = sum(dice)
                     target = src - total
@@ -69,7 +89,6 @@ class BackgammonEnv:
                         moves.append((src, target, total))
                     if target > 24 and total == (25 - src):
                         moves.append((src, 25, total))
-        # Éliminer les doublons éventuels et trier pour affichage
         moves = list(set(moves))
         moves.sort(key=lambda x: (x[0], x[1], x[2]))
         return moves
@@ -83,6 +102,33 @@ class BackgammonEnv:
         Le paramètre 'die_used' correspond à la valeur utilisée (simple ou combinée).
         Renvoie (succès, fin_de_partie)
         """
+        # Gestion des coups venant de la barre
+        if src_input == "bar":
+            # Réintroduction depuis la barre
+            if self.current_player == 0:
+                dest_idx = dest_input - 1
+                if self.board[dest_idx, 1] == 1:
+                    self.board[dest_idx, 1] = 0
+                    self.bar[1] += 1
+                elif self.board[dest_idx, 1] >= 2:
+                    return False, False
+                self.bar[0] -= 1
+                self.board[dest_idx, 0] += 1
+            else:
+                dest_idx = dest_input - 1
+                if self.board[dest_idx, 0] == 1:
+                    self.board[dest_idx, 0] = 0
+                    self.bar[0] += 1
+                elif self.board[dest_idx, 0] >= 2:
+                    return False, False
+                self.bar[1] -= 1
+                self.board[dest_idx, 1] += 1
+            self.enregistrer_coup(self.current_player, "bar", dest_input, die_used)
+            if self.check_win():
+                return True, True
+            return True, False
+
+        # Déplacement normal
         if self.current_player == 0:
             src_idx = src_input - 1
             if dest_input == 0:  # bearing off
@@ -91,7 +137,12 @@ class BackgammonEnv:
                 self.board[src_idx, 0] -= 1
             else:
                 dest_idx = dest_input - 1
-                if self.board[src_idx, 0] <= 0 or self.board[dest_idx, 1] >= 2:
+                if self.board[dest_idx, 1] == 1:
+                    self.board[dest_idx, 1] = 0
+                    self.bar[1] += 1
+                elif self.board[dest_idx, 1] >= 2:
+                    return False, False
+                if self.board[src_idx, 0] <= 0:
                     return False, False
                 self.board[src_idx, 0] -= 1
                 self.board[dest_idx, 0] += 1
@@ -103,7 +154,12 @@ class BackgammonEnv:
                 self.board[src_idx, 1] -= 1
             else:
                 dest_idx = dest_input - 1
-                if self.board[src_idx, 1] <= 0 or self.board[dest_idx, 0] >= 2:
+                if self.board[dest_idx, 0] == 1:
+                    self.board[dest_idx, 0] = 0
+                    self.bar[0] += 1
+                elif self.board[dest_idx, 0] >= 2:
+                    return False, False
+                if self.board[src_idx, 1] <= 0:
                     return False, False
                 self.board[src_idx, 1] -= 1
                 self.board[dest_idx, 1] += 1
@@ -112,6 +168,7 @@ class BackgammonEnv:
         if self.check_win():
             return True, True
         return True, False
+
 
     def check_win(self):
         # Un joueur gagne s'il n'a plus de pions sur le plateau
