@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext
 from itertools import chain
 from backgammon_env import BackgammonEnv
+import time
+from game_database import GameDatabase
 
 # --- Paramètres généraux du canvas ---
 CANVAS_WIDTH  = 800
@@ -174,8 +176,11 @@ def draw_board(canvas, env, selected_point=None, valid_destinations=None):
 
 #------------------------------ACTION BUTTON PART
 class BackgammonGUI:
-    def __init__(self, env):
+    def __init__(self, env, db=None):
         self.env = env
+        self.db = db  # Add database reference
+        self.game_moves = []  # Track moves for recording
+        self.start_time = time.time()  # Track game duration
         self.root = tk.Tk()
         self.root.title("Backgammon - Interface Interactive")
         self.canvas = tk.Canvas(self.root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT)
@@ -250,7 +255,9 @@ class BackgammonGUI:
     def end_turn(self):
         # Réinitialiser pour le prochain joueur
         if self.env.check_win():
-            messagebox.showinfo("Fin de partie", f"Félicitations, Joueur {self.env.current_player + 1} a gagné !")
+            winner = self.env.current_player + 1
+            messagebox.showinfo("Fin de partie", f"Félicitations, Joueur {winner} a gagné !")
+            self.end_game(winner)
             self.reset_game()
             return
         self.env.current_player = 1 - self.env.current_player
@@ -300,6 +307,7 @@ class BackgammonGUI:
                         src, dest, die_used = move
                         success, win = self.env.step_move(src, dest, die_used)
                         if success:
+                            self.execute_move(move)
                             if die_used in self.remaining_dice:
                                 self.remaining_dice.remove(die_used)
                             else:
@@ -345,6 +353,7 @@ class BackgammonGUI:
                         src, dest, die_used = move
                         success, win = self.env.step_move(src, dest, die_used)
                         if success:
+                            self.execute_move(move)
                             if die_used in self.remaining_dice:
                                 self.remaining_dice.remove(die_used)
                             else:
@@ -388,6 +397,40 @@ class BackgammonGUI:
         self.info_label.config(text="Nouvelle partie. Cliquez sur 'Lancer les dés'.")
         self.dice_label.config(text="Dés: []")
         self.redraw()
+
+    def execute_move(self, move):
+        """Record the move for game history and database"""
+        if self.db:  # Only if database is available
+            # Store the move with the current board state
+            self.game_moves.append({
+                "player": self.env.current_player + 1,  # Player 1 or 2 (not 0-indexed)
+                "move": {
+                    "from": move[0],
+                    "to": move[1],
+                    "die": move[2]
+                },
+                "board_state": self.env.board.copy(),
+                "timestamp": time.time() - self.start_time
+            })
+
+    def end_game(self, winner):
+        """Handle end of game and record data"""
+        if self.db:
+            duration = time.time() - self.start_time
+            
+            # Prepare game data
+            game_data = {
+                "player1": self.env.player_names[0],
+                "player2": self.env.player_names[1],
+                "winner": winner,  # 1 or 2
+                "moves": self.game_moves,
+                "duration": duration
+            }
+            
+            # Save to database
+            self.db.save_game(game_data)
+            
+            print(f"Game recorded. Winner: {self.env.player_names[winner-1]}, Duration: {duration:.1f}s")
 
     def run(self):
         self.root.mainloop()
