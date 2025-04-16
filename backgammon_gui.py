@@ -333,10 +333,8 @@ class BackgammonGUI:
                 return "bar"
         return None
 
-
-
     def on_canvas_click(self, event):
-            # Ne pas traiter les clics si aucun dé n'a été lancé
+        # Ne pas traiter les clics si aucun dé n'a été lancé
         if not self.remaining_dice:
             self.info_label.config(text="Veuillez d'abord lancer les dés.")
             return
@@ -352,12 +350,54 @@ class BackgammonGUI:
 
         # Cas particulier pour la barre
         if point_clicked == "bar":
-            # On sélectionne "bar" pour indiquer que le joueur souhaite réintroduire un pion de la barre
             self.selected_point = "bar"
-            # Mettre à jour l'info, par exemple :
-            self.info_label.config(text="Pion(s) sur la barre sélectionné(s). Choisissez où réintroduire.")
+            
+            # Trouver les destinations possibles pour les pions de la barre
+            bar_moves = []
+            for move in self.valid_moves:
+                if move[0] == "bar":  # Vérifier que le mouvement part bien de la barre
+                    bar_moves.append(move)
+            
+            # Extraire uniquement les destinations des mouvements valides
+            self.valid_destinations = [m[1] for m in bar_moves]
+            
+            # Afficher ces destinations dans l'interface
+            self.info_label.config(text=f"Pion(s) sur la barre sélectionné(s). Destinations possibles: {self.valid_destinations}")
             self.redraw()
             return
+        
+        # Si un pion de la barre est sélectionné et qu'on clique sur une destination
+        if self.selected_point == "bar" and isinstance(point_clicked, int):
+            # Vérifier si la destination est valide
+            bar_moves = [m for m in self.valid_moves if m[0] == "bar" and m[1] == point_clicked]
+            
+            if bar_moves:
+                # Prendre le premier mouvement valide (il ne devrait y en avoir qu'un par destination)
+                move = bar_moves[0]
+                src, dest, die_used = move
+                
+                # Effectuer le mouvement
+                success, win = self.env.step_move(src, dest, die_used)
+                
+                if success:
+                    # Enlever le dé utilisé
+                    if die_used in self.remaining_dice:
+                        self.remaining_dice.remove(die_used)
+                    
+                    self.info_label.config(text=f"Mouvement: barre -> {dest} (Dé utilisé: {die_used}).")
+                    self.update_history()
+                    self.selected_point = None
+                    self.valid_destinations = []
+                    self.update_valid_moves()
+                    self.dice_label.config(text=f"Dés: {self.remaining_dice}")
+                    
+                    if not self.remaining_dice or not self.valid_moves:
+                        self.end_turn()
+                else:
+                    self.info_label.config(text="Mouvement invalide depuis la barre.")
+                    
+                self.redraw()
+                return
 
         # Pour éviter l'erreur, on ne fait la conversion qu'après le test "bar"
         idx = point_clicked - 1

@@ -41,24 +41,21 @@ class BackgammonEnv:
         if self.bar[self.current_player] > 0:
             moves = []
             for die in dice:
-                if self.current_player == 0:
+                if self.current_player == 0:  # Joueur 1 (blanc)
                     # Joueur 1 entre par le camp adverse (points 24 → 19), donc point = 25 - die
                     point = 25 - die
-                    if point < 19 or point > 24:
-                        continue
-                    if self.board[point - 1, 1] < 2:
-                        moves.append(("bar", point, die))
-                else:
+                    if 19 <= point <= 24:  # Vérifier que le point est dans la plage valide
+                        if self.board[point - 1, 1] < 2:  # Vérifier que le point n'est pas bloqué par l'adversaire
+                            moves.append(("bar", point, die))
+                else:  # Joueur 2 (rouge)
                     # Joueur 2 entre par points 1 à 6
                     point = die
-                    if point < 1 or point > 6:
-                        continue
-                    if self.board[point - 1, 0] < 2:
-                        moves.append(("bar", point, die))
+                    if 1 <= point <= 6:  # Vérifier que le point est dans la plage valide
+                        if self.board[point - 1, 0] < 2:  # Vérifier que le point n'est pas bloqué par l'adversaire
+                            moves.append(("bar", point, die))
             return list(set(moves))
-
-
-        # Sinon, poursuite de la génération des coups pour chaque pion déjà sur le plateau
+        
+        # Le reste de votre code pour les mouvements standards...
         for point in range(24):
             src = point + 1
             if self.current_player == 0 and self.board[point, 0] > 0:
