@@ -52,17 +52,19 @@ class BackgammonAI:
         """Fonction principale appelée pour faire jouer l'IA"""
         if not valid_moves:
             return None, None, None
-        
+
+        # Prioriser les mouvements pour sortir de la barre
+        bar_moves = [move for move in valid_moves if move[0] == "bar"]
+        if bar_moves:
+            # Évalue et choisit le meilleur mouvement depuis la barre
+            scored_moves = [(self._evaluate_move(move), move) for move in bar_moves]
+            scored_moves.sort(reverse=True)
+            return scored_moves[0][1]
+
         # Évalue et score chaque mouvement possible
-        scored_moves = []
-        for move in valid_moves:
-            score = self._evaluate_move(move)
-            scored_moves.append((score, move))
-        
-        # Prend le meilleur mouvement
+        scored_moves = [(self._evaluate_move(move), move) for move in valid_moves]
         scored_moves.sort(reverse=True)
-        best_move = scored_moves[0][1]
-        return best_move
+        return scored_moves[0][1]
 
     def _evaluate_move(self, move):
         """Évalue un mouvement selon les règles du backgammon"""
@@ -142,10 +144,15 @@ class BackgammonAI:
 
     def _calculate_advance_bonus(self, src, dest):
         """Calcule un bonus basé sur l'avancement vers l'objectif"""
+        # Vérifiez si src et dest sont des entiers
+        if not isinstance(src, int) or not isinstance(dest, int):
+            return 0  # Pas de bonus pour les mouvements spéciaux comme "bar"
+
         if self.env.current_player == 0:
             progress = (24 - dest) - (24 - src)
         else:
             progress = src - dest
+
         return progress * self.weights["advance"]
 
     def _can_bear_off(self):
@@ -154,6 +161,40 @@ class BackgammonAI:
             return all(self.env.board[6:, 0].sum() == 0)
         else:
             return all(self.env.board[:19, 1].sum() == 0)
+
+    def train_self_play(self, num_games=1000):
+        """Entraîne l'IA en jouant contre elle-même."""
+        for game in range(num_games):
+            self.env.reset()  # Réinitialise l'environnement pour une nouvelle partie
+            self.game_history = []
+
+            # Boucle principale de la partie
+            while True:
+                dice = self.env.roll_dice()  # Lance les dés pour le tour
+                valid_moves = self.env.valid_moves(dice)  # Obtenir les mouvements valides
+
+                if not valid_moves:  # Si aucun mouvement n'est possible
+                    self.env.end_turn()
+                    continue
+
+                move = self.ai_move(valid_moves, dice)
+                if move:
+                    src, dest, die_used = move
+                    success, game_over = self.env.step_move(src, dest, die_used)
+                    if game_over:
+                        break
+
+                # Vérifiez si la partie est terminée
+                if self.env.check_win():
+                    break
+
+            # Entraînement après chaque partie
+            won = self.env.current_player == 0  # Exemple : joueur 1 gagne
+            self.learn_from_game(won)
+
+        # Sauvegarde les poids après l'entraînement
+        self._save_weights()
+        print(f"Entraînement terminé : {num_games} parties simulées.")
 
 class BackgammonGUI_AI(BackgammonGUI):
     def __init__(self, env=None):
@@ -173,38 +214,43 @@ class BackgammonGUI_AI(BackgammonGUI):
         if not self.remaining_dice:
             return
 
-        try:
-            # Tant qu'il reste des dés et des mouvements valides
-            while self.remaining_dice and self.valid_moves:
-                move = self.ai.ai_move(self.valid_moves, self.remaining_dice)
-                if not move:
-                    break
-                    
-                src, dest, die_used = move
-                subset = find_subset(self.remaining_dice, die_used)
-                if not subset:
-                    continue
-
-                for d in subset:
-                    self.remaining_dice.remove(d)
-
-                success, win = self.env.step_move(src, dest, die_used)
-                if success:
-                    self.info_label.config(text=f"L'IA a joué : {src} → {dest}")
-                    self.update_board()
-                    self.update_valid_moves()
-                    
-                    if win:
-                        messagebox.showinfo("Victoire", "L'IA a gagné !")
-                        self.root.quit()
-                        return
-
-        finally:
-            if self.remaining_dice:
+        def play_next_move():
+            if not self.remaining_dice or not self.valid_moves:
                 self.pass_turn()
-            else:
-                self.env.current_player = 0
+                return
+
+            move = self.ai.ai_move(self.valid_moves, self.remaining_dice)
+            if not move:
+                self.pass_turn()
+                return
+
+            src, dest, die_used = move
+            subset = find_subset(self.remaining_dice, die_used)
+            if not subset:
+                self.pass_turn()
+                return
+
+            for d in subset:
+                self.remaining_dice.remove(d)
+
+            success, win = self.env.step_move(src, dest, die_used)
+            if success:
+                self.info_label.config(text=f"L'IA a joué : {src} → {dest} (Dé utilisé : {die_used})")
+                self.update_history()
                 self.update_valid_moves()
+                self.redraw()
+
+                if win:
+                    self.ai.learn_from_game(won=True)  # L'IA a gagné
+                    messagebox.showinfo("Victoire", "L'IA a gagné !")
+                    self.root.quit()
+                    return
+
+            # Ajouter un délai avant le prochain coup
+            self.root.after(1000, play_next_move)
+
+        # Démarrer la séquence de coups
+        play_next_move()
 
     def on_canvas_click(self, event):
         if self.env.current_player == 1:  # Ignore les clics pendant le tour de l'IA
@@ -212,5 +258,7 @@ class BackgammonGUI_AI(BackgammonGUI):
         super().on_canvas_click(event)
 
 if __name__ == '__main__':
-    app = BackgammonGUI_AI()
-    app.run()
+    env = BackgammonEnv()
+    ai = BackgammonAI(env)
+
+    ai.train_self_play(num_games=10000)

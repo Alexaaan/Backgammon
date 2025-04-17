@@ -9,6 +9,10 @@ class BackgammonEnv:
         self.bar = [0, 0]
         self.current_player = 0  # 0 pour Joueur 1, 1 pour Joueur 2
         self.reset()
+    
+    def end_turn(self):
+        """Change le joueur courant, pour le self_train_ai"""
+        self.current_player = 1 - self.current_player  # Alterne entre 0 (Joueur 1) et 1 (Joueur 2)
 
     def reset(self):
         # Configuration standard simplifiée
@@ -138,6 +142,8 @@ class BackgammonEnv:
                     self.bar[1] += 1
                 elif self.board[dest_idx, 1] >= 2:
                     return False, False
+                if self.board[dest_idx, 0] >= 5:  # Vérification de la limite de 5 pions
+                    return False, False
                 self.bar[0] -= 1
                 self.board[dest_idx, 0] += 1
             else:
@@ -147,6 +153,8 @@ class BackgammonEnv:
                     self.bar[0] += 1
                 elif self.board[dest_idx, 0] >= 2:
                     return False, False
+                if self.board[dest_idx, 1] >= 5:  # Vérification de la limite de 5 pions
+                    return False, False
                 self.bar[1] -= 1
                 self.board[dest_idx, 1] += 1
             self.enregistrer_coup(self.current_player, "bar", dest_input, die_used)
@@ -154,21 +162,6 @@ class BackgammonEnv:
                 return True, True
             return True, False
 
-        # Vérification pour le bearing off
-        can_bear_off = True
-        if self.current_player == 0:  # Joueur 1
-            # Vérifier qu'il n'y a pas de pions dans les points 7-24
-            for i in range(6, 24):
-                if self.board[i, 0] > 0:
-                    can_bear_off = False
-                    break
-        else:  # Joueur 2
-            # Vérifier qu'il n'y a pas de pions dans les points 1-18
-            for i in range(0, 18):
-                if self.board[i, 1] > 0:
-                    can_bear_off = False
-                    break
-        
         # Déplacement normal
         if self.current_player == 0:
             src_idx = src_input - 1
@@ -190,6 +183,8 @@ class BackgammonEnv:
                     self.board[dest_idx, 1] = 0
                     self.bar[1] += 1
                 elif self.board[dest_idx, 1] >= 2:
+                    return False, False
+                if self.board[dest_idx, 0] >= 5:  # Vérification de la limite de 5 pions
                     return False, False
                 if self.board[src_idx, 0] <= 0:
                     return False, False
@@ -216,6 +211,8 @@ class BackgammonEnv:
                     self.bar[0] += 1
                 elif self.board[dest_idx, 0] >= 2:
                     return False, False
+                if self.board[dest_idx, 1] >= 5:  # Vérification de la limite de 5 pions
+                    return False, False
                 if self.board[src_idx, 1] <= 0:
                     return False, False
                 self.board[src_idx, 1] -= 1
@@ -225,7 +222,6 @@ class BackgammonEnv:
         if self.check_win():
             return True, True
         return True, False
-
 
     def check_win(self):
         # Un joueur gagne s'il n'a plus de pions sur le plateau
