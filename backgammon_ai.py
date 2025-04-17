@@ -261,4 +261,4 @@ if __name__ == '__main__':
     env = BackgammonEnv()
     ai = BackgammonAI(env)
 
-    ai.train_self_play(num_games=10000)
+    ai.train_self_play(num_games=10000000)

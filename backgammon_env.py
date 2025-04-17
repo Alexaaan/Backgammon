@@ -166,6 +166,8 @@ class BackgammonEnv:
         if self.current_player == 0:
             src_idx = src_input - 1
             if dest_input == 0:  # bearing off
+                # Vérifier si le joueur peut faire un bearing off
+                can_bear_off = all(self.board[i, 0] == 0 for i in range(6, 24))
                 if not can_bear_off:
                     return False, False
                 # Règle exacte pour le dé (si on a des pions plus loin, on doit utiliser un dé exact)
@@ -193,6 +195,8 @@ class BackgammonEnv:
         else:
             src_idx = src_input - 1
             if dest_input == 25:  # bearing off
+                # Vérifier si le joueur peut faire un bearing off
+                can_bear_off = all(self.board[i, 1] == 0 for i in range(0, 18))
                 if not can_bear_off:
                     return False, False
                 # Règle exacte pour le dé (si on a des pions plus loin, on doit utiliser un dé exact)
