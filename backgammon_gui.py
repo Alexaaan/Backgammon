@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext
 from itertools import chain
 from backgammon_env import BackgammonEnv
+from statistics import GameStatistics
 
 # --- Paramètres généraux du canvas ---
 CANVAS_WIDTH  = 880
@@ -253,6 +254,9 @@ class BackgammonGUI:
         self.canvas = tk.Canvas(self.root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT)
         self.canvas.grid(row=0, column=0, columnspan=4)
         
+        # Ajoutez cette ligne pour créer l'instance des statistiques
+        self.game_stats = GameStatistics()
+        
         # Zone d'information et contrôle
         self.info_label = tk.Label(self.root, text="Cliquez sur 'Lancer les dés' pour commencer.", font=("Arial", 12))
         self.info_label.grid(row=1, column=0, columnspan=4, pady=5)
@@ -323,6 +327,9 @@ class BackgammonGUI:
     def end_turn(self):
         # Réinitialiser pour le prochain joueur
         if self.env.check_win():
+            # Ajouter cette ligne pour enregistrer la victoire
+            self.game_stats.add_win(self.env.current_player + 1)
+            
             messagebox.showinfo("Fin de partie", f"Félicitations, Joueur {self.env.current_player + 1} a gagné !")
             self.reset_game()
             return

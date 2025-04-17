@@ -241,6 +241,8 @@ class BackgammonGUI_AI(BackgammonGUI):
                 self.redraw()
 
                 if win:
+                    self.game_stats.add_win(2)  # L'IA est joueur 2
+                    
                     self.ai.learn_from_game(won=True)  # L'IA a gagné
                     messagebox.showinfo("Victoire", "L'IA a gagné !")
                     self.root.quit()

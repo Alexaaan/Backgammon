@@ -3,6 +3,8 @@ from tkinter import ttk
 from backgammon_env import BackgammonEnv
 from backgammon_gui import BackgammonGUI
 from backgammon_ai import BackgammonGUI_AI
+from statistics import GameStatistics
+from stats_window import StatsWindow
 
 class MainMenu:
     def __init__(self, root):
@@ -20,13 +22,24 @@ class MainMenu:
 
         self.play_button = ttk.Button(self.frame, text="Jouer", command=self.open_mode_selection)
         self.play_button.pack(pady=10)
+        
+        # Nouveau bouton statistiques
+        self.stats_button = ttk.Button(self.frame, text="Statistiques", command=self.open_stats)
+        self.stats_button.pack(pady=10)
 
         self.quit_button = ttk.Button(self.frame, text="Quitter", command=root.quit)
         self.quit_button.pack(pady=10)
+        
+        # Instance de GameStatistics pour le menu principal
+        self.game_stats = GameStatistics()
 
     def open_mode_selection(self):
         self.frame.destroy()
         ModeSelection(self.root)
+        
+    def open_stats(self):
+        # Ouvre la fenêtre de statistiques
+        StatsWindow(self.root)
 
 class ModeSelection:
     def __init__(self, root):
@@ -45,6 +58,8 @@ class ModeSelection:
 
         self.back_button = ttk.Button(self.frame, text="Retour", command=self.go_back)
         self.back_button.pack(pady=10)
+
+        self.game_stats = GameStatistics()
 
     def launch_pvp(self):
         self.root.destroy()
