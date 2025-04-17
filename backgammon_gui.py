@@ -5,7 +5,7 @@ from itertools import chain
 from backgammon_env import BackgammonEnv
 
 # --- Paramètres généraux du canvas ---
-CANVAS_WIDTH  = 800
+CANVAS_WIDTH  = 880
 CANVAS_HEIGHT = 500
 BAR_WIDTH     = 40
 
@@ -44,11 +44,16 @@ def get_triangle_for_point(point):
       - is_bottom : True si le triangle est en bas (points 1-12), False si en haut (points 13-24)
       - ordre : indice horizontal (0 à 5) dans le quadrant
     """
+    # Largeur du plateau est réduite pour faire place aux zones de bearing off
+    plateau_width = CANVAS_WIDTH - 80
+    left_quadrant_width = (plateau_width - BAR_WIDTH) / 2
+    right_quadrant_width = left_quadrant_width
+    
     if 1 <= point <= 6:
         is_bottom = True
         ordre = 6 - point
         tri_width = right_quadrant_width / 6
-        x0 = CANVAS_WIDTH - right_quadrant_width
+        x0 = plateau_width - right_quadrant_width
         x1 = x0 + ordre * tri_width
         x2 = x1 + tri_width
         base_y = CANVAS_HEIGHT
@@ -75,7 +80,7 @@ def get_triangle_for_point(point):
         is_bottom = False
         ordre = point - 19   # Pour que 19 ait ordre 0 et 24 ordre 5
         tri_width = right_quadrant_width / 6
-        x0 = CANVAS_WIDTH - right_quadrant_width
+        x0 = plateau_width - right_quadrant_width
         x1 = x0 + ordre * tri_width
         x2 = x1 + tri_width
         base_y = 0
@@ -150,9 +155,13 @@ def draw_board(canvas, env, selected_point=None, valid_destinations=None):
     canvas.config(bg=BOARD_BG_COLOR)
 
     # Bar central
-    bar_x1 = (CANVAS_WIDTH - BAR_WIDTH) / 2
+    bar_x1 = (CANVAS_WIDTH - BAR_WIDTH - 80) / 2  # Ajustement pour le nouveau width
     bar_x2 = bar_x1 + BAR_WIDTH
     canvas.create_rectangle(bar_x1, 0, bar_x2, CANVAS_HEIGHT, fill=BAR_COLOR, outline=BAR_COLOR)
+
+    # Ligne délimitant le plateau principal des zones de bearing off
+    plateau_width = CANVAS_WIDTH - 80  # Largeur du plateau sans les zones bearing off
+    canvas.create_line(plateau_width, 0, plateau_width, CANVAS_HEIGHT, fill="black", width=2)
 
     triangles_bbox = {}
     for point in range(1, 25):
@@ -170,32 +179,43 @@ def draw_board(canvas, env, selected_point=None, valid_destinations=None):
             draw_checkers(canvas, center_x - 10, coords, count_white, PLAYER1_COLOR)
             draw_checkers(canvas, center_x + 10, coords, count_red, PLAYER2_COLOR)
 
-    # Déplacement des zones de borne off tout à droite
-    off_width, off_height = 80, 80
-    offset_right = 100  # Plus gros décalage
-
+    # Zones de bearing off clairement séparées du plateau
+    off_width, off_height = 70, 80
+    
     import numpy as np
     borne_off_j1 = 15 - int(np.sum(env.board[:, 0])) - env.bar[0]
     borne_off_j2 = 15 - int(np.sum(env.board[:, 1])) - env.bar[1]
 
-    # Joueur 1 (blanc) : sortie en bas droite
-    off_x1 = CANVAS_WIDTH + offset_right
+    # Joueur 1 (blanc) : sortie en bas à droite
+    off_x1 = plateau_width + 5
     off_y1 = CANVAS_HEIGHT - off_height - 10
-    off_x2 = off_x1 + off_width
+    off_x2 = CANVAS_WIDTH - 5
     off_y2 = CANVAS_HEIGHT - 10
-    canvas.create_rectangle(off_x1, off_y1, off_x2, off_y2, fill=PLAYER1_COLOR, outline="black", width=2)
-    canvas.create_text((off_x1 + off_x2)/2, (off_y1 + off_y2)/2, text=str(borne_off_j1), font=("Arial", 20, "bold"))
-    canvas.create_text((off_x1 + off_x2)/2, off_y1 - 15, text="1", font=("Arial", 14, "bold"))
+    
+    # Highlight si la destination 0 est valide
+    highlight_color = HIGHLIGHT_COLOR if (valid_destinations and 0 in valid_destinations) else "black"
+    canvas.create_rectangle(off_x1, off_y1, off_x2, off_y2, 
+                           fill="#EAEAEA", outline=highlight_color, width=3)
+    canvas.create_text((off_x1 + off_x2)/2, (off_y1 + off_y2)/2, 
+                      text=str(borne_off_j1), font=("Arial", 20, "bold"))
+    canvas.create_text((off_x1 + off_x2)/2, off_y1 - 15, 
+                      text="Sortie J1", font=("Arial", 12, "bold"))
 
-    # Joueur 2 (rouge) : sortie en haut droite
-    off_x1_2 = CANVAS_WIDTH + offset_right
+    # Joueur 2 (rouge) : sortie en haut à droite
+    off_x1_2 = plateau_width + 5
     off_y1_2 = 10
-    off_x2_2 = off_x1_2 + off_width
+    off_x2_2 = CANVAS_WIDTH - 5
     off_y2_2 = 10 + off_height
-    canvas.create_rectangle(off_x1_2, off_y1_2, off_x2_2, off_y2_2, fill=PLAYER2_COLOR, outline="black", width=2)
-    canvas.create_text((off_x1_2 + off_x2_2)/2, (off_y1_2 + off_y2_2)/2, text=str(borne_off_j2), font=("Arial", 20, "bold"))
-    canvas.create_text((off_x1_2 + off_x2_2)/2, off_y2_2 + 15, text="25", font=("Arial", 14, "bold"))
-
+    
+    # Highlight si la destination 25 est valide
+    highlight_color = HIGHLIGHT_COLOR if (valid_destinations and 25 in valid_destinations) else "black"
+    canvas.create_rectangle(off_x1_2, off_y1_2, off_x2_2, off_y2_2, 
+                           fill="#FFCCCB", outline=highlight_color, width=3)
+    canvas.create_text((off_x1_2 + off_x2_2)/2, (off_y1_2 + off_y2_2)/2, 
+                      text=str(borne_off_j2), font=("Arial", 20, "bold"))
+    canvas.create_text((off_x1_2 + off_x2_2)/2, off_y2_2 + 15, 
+                      text="Sortie J2", font=("Arial", 12, "bold"))
+    
     # Pions sur la barre
     bar_center_x = (bar_x1 + bar_x2) / 2
     if env.bar[0] > 0:
@@ -213,11 +233,15 @@ def draw_board(canvas, env, selected_point=None, valid_destinations=None):
                                bar_center_x + CHECKER_RADIUS, y + CHECKER_RADIUS,
                                fill=PLAYER2_COLOR, outline="black", width=2)
 
+    # Stocker les nouvelles coordonnées des bearing off boxes
     bearing_off_boxes = {
         0: (off_x1, off_y1, off_x2, off_y2),
         25: (off_x1_2, off_y1_2, off_x2_2, off_y2_2)
     }
 
+    # Zone pour la barre
+    bar_bbox = (bar_x1, 0, bar_x2, CANVAS_HEIGHT)
+    
     return triangles_bbox, bearing_off_boxes  
 #------------------------------ACTION BUTTON PART
 class BackgammonGUI:

@@ -32,9 +32,8 @@ class BackgammonEnv:
         Renvoie la liste des mouvements valides possibles, sous forme de tuples (source, destination, dé utilisé).
         Les numéros de cases sont en 1-indexé (1 à 24).
         Pour le bearing off :
-          - Joueur 1 : destination 0 (sortie)
-          - Joueur 2 : destination 25 (sortie)
-        On considère ici à la fois les mouvements individuels et, si possible, la combinaison des dés.
+        - Joueur 1 : destination 0 (sortie)
+        - Joueur 2 : destination 25 (sortie)
         """
         moves = []
         # Si le joueur a des pions sur la barre, seuls les mouvements de réintroduction sont autorisés.
@@ -55,6 +54,21 @@ class BackgammonEnv:
                             moves.append(("bar", point, die))
             return list(set(moves))
         
+        # Vérifier si tous les pions du joueur sont dans son home board pour le bearing off
+        can_bear_off = True
+        if self.current_player == 0:  # Joueur 1 (blanc)
+            # Vérifier qu'il n'y a pas de pions dans les points 7-24
+            for i in range(6, 24):
+                if self.board[i, 0] > 0:
+                    can_bear_off = False
+                    break
+        else:  # Joueur 2 (rouge)
+            # Vérifier qu'il n'y a pas de pions dans les points 1-18
+            for i in range(0, 18):
+                if self.board[i, 1] > 0:
+                    can_bear_off = False
+                    break
+        
         # Le reste de votre code pour les mouvements standards...
         for point in range(24):
             src = point + 1
@@ -63,29 +77,44 @@ class BackgammonEnv:
                     target = src - die
                     if target >= 1 and self.board[target - 1, 1] < 2:
                         moves.append((src, target, die))
-                    if target <= 0 and die == src:
-                        moves.append((src, 0, die))
-                if len(dice) > 1:
-                    total = sum(dice)
-                    target = src - total
-                    if target >= 1 and self.board[target - 1, 1] < 2:
-                        moves.append((src, target, total))
-                    if target <= 0 and total == src:
-                        moves.append((src, 0, total))
+                    # Règle du bearing off modifiée
+                    elif target <= 0 and can_bear_off:
+                        # Si le dé est exact, toujours autorisé
+                        if die == src:
+                            moves.append((src, 0, die))
+                        # Si le dé est plus grand que nécessaire, on vérifie qu'il n'y a pas de pions plus loin
+                        elif die > src:
+                            # Vérifier qu'il n'y a pas de pions sur des points plus élevés
+                            has_higher_points = False
+                            for i in range(point + 1, 6):  # Vérifier les points plus hauts dans le home board
+                                if self.board[i, 0] > 0:
+                                    has_higher_points = True
+                                    break
+                            if not has_higher_points:
+                                moves.append((src, 0, die))
             elif self.current_player == 1 and self.board[point, 1] > 0:
                 for die in dice:
                     target = src + die
                     if target <= 24 and self.board[target - 1, 0] < 2:
                         moves.append((src, target, die))
-                    if target > 24 and die == (25 - src):
-                        moves.append((src, 25, die))
-                if len(dice) > 1:
-                    total = sum(dice)
-                    target = src + total
-                    if target <= 24 and self.board[target - 1, 0] < 2:
-                        moves.append((src, target, total))
-                    if target > 24 and total == (25 - src):
-                        moves.append((src, 25, total))
+                    # Règle du bearing off modifiée
+                    elif target > 24 and can_bear_off:
+                        # Si le dé est exact, toujours autorisé
+                        if die == (25 - src):
+                            moves.append((src, 25, die))
+                        # Si le dé est plus grand que nécessaire, on vérifie qu'il n'y a pas de pions plus loin
+                        elif die > (25 - src):
+                            # Vérifier qu'il n'y a pas de pions sur des points inférieurs
+                            has_lower_points = False
+                            for i in range(18, point):  # Vérifier les points plus bas dans le home board
+                                if self.board[i, 1] > 0:
+                                    has_lower_points = True
+                                    break
+                            if not has_lower_points:
+                                moves.append((src, 25, die))
+                                
+        # Code pour les combinaisons de dés (à ajouter si nécessaire)
+        
         moves = list(set(moves))
         moves.sort(key=lambda x: (x[0], x[1], x[2]))
         return moves
@@ -94,8 +123,8 @@ class BackgammonEnv:
         """
         Exécute un mouvement donné par le joueur.
         Les entrées sont en 1-indexé, avec pour la sortie :
-          - Joueur 1 : destination 0
-          - Joueur 2 : destination 25
+        - Joueur 1 : destination 0
+        - Joueur 2 : destination 25
         Le paramètre 'die_used' correspond à la valeur utilisée (simple ou combinée).
         Renvoie (succès, fin_de_partie)
         """
@@ -125,12 +154,35 @@ class BackgammonEnv:
                 return True, True
             return True, False
 
+        # Vérification pour le bearing off
+        can_bear_off = True
+        if self.current_player == 0:  # Joueur 1
+            # Vérifier qu'il n'y a pas de pions dans les points 7-24
+            for i in range(6, 24):
+                if self.board[i, 0] > 0:
+                    can_bear_off = False
+                    break
+        else:  # Joueur 2
+            # Vérifier qu'il n'y a pas de pions dans les points 1-18
+            for i in range(0, 18):
+                if self.board[i, 1] > 0:
+                    can_bear_off = False
+                    break
+        
         # Déplacement normal
         if self.current_player == 0:
             src_idx = src_input - 1
             if dest_input == 0:  # bearing off
-                if die_used != src_input:
+                if not can_bear_off:
                     return False, False
+                # Règle exacte pour le dé (si on a des pions plus loin, on doit utiliser un dé exact)
+                if die_used < src_input:
+                    return False, False
+                if die_used > src_input:
+                    # Vérifier s'il y a des pions sur des points plus élevés
+                    for i in range(src_idx + 1, 6):
+                        if self.board[i, 0] > 0:
+                            return False, False
                 self.board[src_idx, 0] -= 1
             else:
                 dest_idx = dest_input - 1
@@ -146,8 +198,16 @@ class BackgammonEnv:
         else:
             src_idx = src_input - 1
             if dest_input == 25:  # bearing off
-                if die_used != (25 - src_input):
+                if not can_bear_off:
                     return False, False
+                # Règle exacte pour le dé (si on a des pions plus loin, on doit utiliser un dé exact)
+                if die_used < (25 - src_input):
+                    return False, False
+                if die_used > (25 - src_input):
+                    # Vérifier s'il y a des pions sur des points inférieurs
+                    for i in range(18, src_idx):
+                        if self.board[i, 1] > 0:
+                            return False, False
                 self.board[src_idx, 1] -= 1
             else:
                 dest_idx = dest_input - 1
