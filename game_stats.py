@@ -1,7 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from datetime import datetime
+import tkinter as tk
+from tkinter import Toplevel, Text, Scrollbar, VERTICAL, RIGHT, Y, LEFT, BOTH
 
 class GameStats:
     def __init__(self):
@@ -60,3 +61,24 @@ class GameStats:
         plt.title('Distribution des captures par joueur')
         plt.savefig('captures.png')
         plt.close()
+
+    def show_stats_menu(self, root):
+        """Affiche une fenêtre Tkinter avec les statistiques."""
+        window = Toplevel(root)
+        window.title("Statistiques des parties")
+        window.geometry("600x400")
+
+        # Zone de texte pour afficher les statistiques
+        text_area = Text(window, wrap="none", font=("Arial", 12))
+        scrollbar = Scrollbar(window, orient=VERTICAL, command=text_area.yview)
+        text_area.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side=RIGHT, fill=Y)
+        text_area.pack(side=LEFT, fill=BOTH, expand=True)
+
+        # Charger les statistiques et les afficher
+        try:
+            stats_text = self.stats_df.to_string(index=False)
+            text_area.insert("1.0", stats_text)
+        except Exception as e:
+            text_area.insert("1.0", f"Erreur lors du chargement des statistiques : {e}")

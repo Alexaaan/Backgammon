@@ -3,10 +3,12 @@ from tkinter import ttk
 from backgammon_env import BackgammonEnv
 from backgammon_gui import BackgammonGUI
 from backgammon_ai import BackgammonGUI_AI
+from game_stats import GameStats
 
 class MainMenu:
     def __init__(self, root):
         self.root = root
+        self.stats = GameStats()
         root.title("Backgammon - Menu Principal")
         self.style = ttk.Style()
         self.style.theme_use("clam")
@@ -21,12 +23,18 @@ class MainMenu:
         self.play_button = ttk.Button(self.frame, text="Jouer", command=self.open_mode_selection)
         self.play_button.pack(pady=10)
 
+        self.stats_button = ttk.Button(self.frame, text="Voir les statistiques", command=self.open_stats_menu)
+        self.stats_button.pack(pady=10)
+
         self.quit_button = ttk.Button(self.frame, text="Quitter", command=root.quit)
         self.quit_button.pack(pady=10)
 
     def open_mode_selection(self):
         self.frame.destroy()
         ModeSelection(self.root)
+
+    def open_stats_menu(self):
+        self.stats.show_stats_menu(self.root)
 
 class ModeSelection:
     def __init__(self, root):

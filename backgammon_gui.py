@@ -1,8 +1,10 @@
 # backgammon_gui.py
+from datetime import datetime
 import tkinter as tk
 from tkinter import messagebox, scrolledtext
 from itertools import chain
 from backgammon_env import BackgammonEnv
+from game_stats import GameStats
 
 # --- Paramètres généraux du canvas ---
 CANVAS_WIDTH  = 880
@@ -248,6 +250,7 @@ class BackgammonGUI:
     def __init__(self, env, ai=None):
         self.env = env
         self.ai = ai
+        self.stats = GameStats() 
         self.root = tk.Tk()
         self.root.title("Backgammon - Interface Interactive")
         self.canvas = tk.Canvas(self.root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT)
@@ -323,7 +326,18 @@ class BackgammonGUI:
     def end_turn(self):
         # Réinitialiser pour le prochain joueur
         if self.env.check_win():
-            messagebox.showinfo("Fin de partie", f"Félicitations, Joueur {self.env.current_player + 1} a gagné !")
+            winner = f"Joueur {self.env.current_player + 1}"
+            game_mode = "Joueur vs Joueur"
+            duration = (datetime.now() - self.env.start_time).total_seconds()
+            self.stats.add_game(
+                winner=self.env.current_player + 1,
+                duration=duration,
+                total_moves=self.env.total_moves,
+                p1_captures=self.env.board[:, 0].sum(),
+                p2_captures=self.env.board[:, 1].sum(),
+                game_mode=game_mode
+            )
+            messagebox.showinfo("Fin de partie", f"Félicitations, {winner} a gagné !")
             self.reset_game()
             return
         self.env.current_player = 1 - self.env.current_player
@@ -517,6 +531,7 @@ class BackgammonGUI:
         self.redraw()
 
     def reset_game(self):
+        self.env.start_game()
         self.env.reset()
         self.env.current_player = 0
         self.remaining_dice = []
