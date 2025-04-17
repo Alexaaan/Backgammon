@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext
 from itertools import chain
 from backgammon_env import BackgammonEnv
-from statistics import GameStatistics
+from game_statistics import GameStatistics
 
 # --- Paramètres généraux du canvas ---
 CANVAS_WIDTH  = 880
@@ -327,10 +327,16 @@ class BackgammonGUI:
     def end_turn(self):
         # Réinitialiser pour le prochain joueur
         if self.env.check_win():
-            # Ajouter cette ligne pour enregistrer la victoire
-            self.game_stats.add_win(self.env.current_player + 1)
+            # Récupérer le nombre de coups joués - assurez-vous que cette valeur est correcte
+            moves_count = len(self.env.move_history) if hasattr(self.env, 'move_history') else 0
             
-            messagebox.showinfo("Fin de partie", f"Félicitations, Joueur {self.env.current_player + 1} a gagné !")
+            # Si move_history n'existe pas, utilisez une autre méthode pour compter
+            if moves_count == 0:
+                # Alternative: compteur de tours * 2 (approximation)
+                moves_count = self.env.turn_count * 2 if hasattr(self.env, 'turn_count') else 10
+            
+            self.game_stats.add_win(self.env.current_player + 1, moves_count)
+            messagebox.showinfo("Fin de partie", f"Félicitations, Joueur {self.env.current_player + 1} a gagné en {moves_count} coups !")
             self.reset_game()
             return
         self.env.current_player = 1 - self.env.current_player

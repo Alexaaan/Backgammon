@@ -3,7 +3,7 @@ from tkinter import ttk
 from backgammon_env import BackgammonEnv
 from backgammon_gui import BackgammonGUI
 from backgammon_ai import BackgammonGUI_AI
-from statistics import GameStatistics
+from game_statistics import GameStatistics
 from stats_window import StatsWindow
 
 class MainMenu:

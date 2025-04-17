@@ -241,10 +241,14 @@ class BackgammonGUI_AI(BackgammonGUI):
                 self.redraw()
 
                 if win:
-                    self.game_stats.add_win(2)  # L'IA est joueur 2
+                    # Récupérer le nombre de coups joués
+                    moves_count = len(self.env.move_history) if hasattr(self.env, 'move_history') else 0
+                    
+                    # Enregistrer la victoire avec le nombre de coups
+                    self.game_stats.add_win(2, moves_count)  # L'IA est joueur 2
                     
                     self.ai.learn_from_game(won=True)  # L'IA a gagné
-                    messagebox.showinfo("Victoire", "L'IA a gagné !")
+                    messagebox.showinfo("Victoire", f"L'IA a gagné en {moves_count} coups !")
                     self.root.quit()
                     return
 
