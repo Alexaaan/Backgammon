@@ -245,8 +245,9 @@ def draw_board(canvas, env, selected_point=None, valid_destinations=None):
     return triangles_bbox, bearing_off_boxes  
 #------------------------------ACTION BUTTON PART
 class BackgammonGUI:
-    def __init__(self, env):
+    def __init__(self, env, ai=None):
         self.env = env
+        self.ai = ai
         self.root = tk.Tk()
         self.root.title("Backgammon - Interface Interactive")
         self.canvas = tk.Canvas(self.root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT)
@@ -349,7 +350,7 @@ class BackgammonGUI:
 
         # 3. Vérifier si le clic se situe dans la zone du bar
         # Les coordonnées horizontales du bar sont définies par :
-        bar_x1 = (CANVAS_WIDTH - BAR_WIDTH) / 2
+        bar_x1 = (CANVAS_WIDTH - BAR_WIDTH - 80) / 2  # Ajustement pour le nouveau width
         bar_x2 = bar_x1 + BAR_WIDTH
         if bar_x1 <= x <= bar_x2:
             # Si le joueur a des pions sur la barre, on renvoie "bar" pour indiquer cette sélection

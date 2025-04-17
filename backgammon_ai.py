@@ -2,256 +2,214 @@
 import tkinter as tk
 from tkinter import messagebox, scrolledtext
 import random
+import numpy as np
+import json
+from pathlib import Path
 from backgammon_env import BackgammonEnv, find_subset
-from backgammon_gui import Board,CANVAS_WIDTH, CANVAS_HEIGHT
+from backgammon_gui import Board, CANVAS_WIDTH, CANVAS_HEIGHT, BackgammonGUI
 
-class BackgammonGUI_AI:
-    def __init__(self):
-        self.env = BackgammonEnv()
-        self.env.reset()
-        # On considère que Joueur 1 est l'humain et Joueur 2 l'IA
-        self.env.current_player = 0
+class BackgammonAI:
+    def __init__(self, env):
+        self.env = env
+        self.learning_rate = 0.1
+        self.weights = self._load_weights()
+        self.game_history = []
+        self.direction = 1 if self.env.current_player == 1 else -1
+
+    def _load_weights(self):
+        """Charge ou initialise les poids d'apprentissage avec des règles de base"""
+        weights_file = Path("ai_weights.json")
+        if weights_file.exists():
+            with open(weights_file, "r") as f:
+                return json.load(f)
+        return {
+            "capture": 15.0,          # Priorité à la capture des pions adverses
+            "barrier": 10.0,          # Création de barrières pour bloquer
+            "protect": 8.0,           # Protection des pions isolés
+            "home_board": 12.0,       # Priorité à ramener les pions dans son jan intérieur
+            "bear_off": 20.0,         # Priorité maximale pour sortir les pions en fin de partie
+            "advance": 0.5            # Petit bonus pour l'avancement général
+        }
+
+    def _save_weights(self):
+        """Sauvegarde les poids appris"""
+        with open("ai_weights.json", "w") as f:
+            json.dump(self.weights, f, indent=4)
+
+    def learn_from_game(self, won):
+        """Apprend de la partie qui vient de se terminer"""
+        adjustment = self.learning_rate if won else -self.learning_rate
         
-        self.root = tk.Tk()
+        # Ajuste les poids en fonction du résultat
+        for move_type, count in self.game_history:
+            if move_type in self.weights:
+                self.weights[move_type] += adjustment * count
+        
+        self._save_weights()
+        self.game_history = []  # Réinitialise l'historique
+
+    def ai_move(self, valid_moves, remaining_dice):
+        """Fonction principale appelée pour faire jouer l'IA"""
+        if not valid_moves:
+            return None, None, None
+        
+        # Évalue et score chaque mouvement possible
+        scored_moves = []
+        for move in valid_moves:
+            score = self._evaluate_move(move)
+            scored_moves.append((score, move))
+        
+        # Prend le meilleur mouvement
+        scored_moves.sort(reverse=True)
+        best_move = scored_moves[0][1]
+        return best_move
+
+    def _evaluate_move(self, move):
+        """Évalue un mouvement selon les règles du backgammon"""
+        src, dest, _ = move
+        score = 0
+        
+        # Priorité maximale à la sortie de la barre (src = -1 pour joueur 1 ou 24 pour joueur 0)
+        if (self.env.current_player == 1 and src == -1) or \
+           (self.env.current_player == 0 and src == 24):
+            score += 30.0  # Score plus élevé que toutes les autres actions
+            self.game_history.append(("bar_exit", 1))
+            return score  # Retourne immédiatement car c'est obligatoire de sortir de la barre
+        
+        # Capture d'un pion adverse
+        if self._captures_opponent(move):
+            score += self.weights["capture"]
+            self.game_history.append(("capture", 1))
+        
+        # Création d'une barrière (2 pions ou plus)
+        if self._creates_barrier(move):
+            score += self.weights["barrier"]
+            self.game_history.append(("barrier", 1))
+        
+        # Protection d'un pion isolé
+        if self._protects_isolated(move):
+            score += self.weights["protect"]
+            self.game_history.append(("protect", 1))
+        
+        # Bonus pour entrer dans son jan intérieur (les 6 dernières cases)
+        if self._enters_home_board(move):
+            score += self.weights["home_board"]
+            self.game_history.append(("home_board", 1))
+        
+        # Bonus pour sortir un pion (bearing off)
+        if self._is_bearing_off(move):
+            score += self.weights["bear_off"]
+            self.game_history.append(("bear_off", 1))
+        
+        # Petit bonus pour l'avancement général
+        score += self._calculate_advance_bonus(src, dest)
+        
+        return score
+
+    def _captures_opponent(self, move):
+        """Vérifie si le mouvement capture un pion adverse"""
+        _, dest, _ = move
+        if dest == 0 or dest == 25:  # Bearing off
+            return False
+        return self.env.board[dest-1, 1-self.env.current_player] == 1
+
+    def _creates_barrier(self, move):
+        """Vérifie si le mouvement crée une barrière"""
+        _, dest, _ = move
+        if dest == 0 or dest == 25:
+            return False
+        return self.env.board[dest-1, self.env.current_player] >= 1
+
+    def _protects_isolated(self, move):
+        """Vérifie si le mouvement protège un pion isolé"""
+        _, dest, _ = move
+        if dest == 0 or dest == 25:
+            return False
+        return self.env.board[dest-1, self.env.current_player] == 1
+
+    def _enters_home_board(self, move):
+        """Vérifie si le mouvement amène un pion dans le jan intérieur"""
+        _, dest, _ = move
+        if self.env.current_player == 0:
+            return 0 <= dest <= 6
+        else:
+            return 19 <= dest <= 24
+
+    def _is_bearing_off(self, move):
+        """Vérifie si le mouvement permet de sortir un pion"""
+        _, dest, _ = move
+        return dest == 25 if self.env.current_player == 1 else dest == 0
+
+    def _calculate_advance_bonus(self, src, dest):
+        """Calcule un bonus basé sur l'avancement vers l'objectif"""
+        if self.env.current_player == 0:
+            progress = (24 - dest) - (24 - src)
+        else:
+            progress = src - dest
+        return progress * self.weights["advance"]
+
+    def _can_bear_off(self):
+        """Vérifie si l'IA peut commencer à sortir ses pions"""
+        if self.env.current_player == 0:
+            return all(self.env.board[6:, 0].sum() == 0)
+        else:
+            return all(self.env.board[:19, 1].sum() == 0)
+
+class BackgammonGUI_AI(BackgammonGUI):
+    def __init__(self, env=None):
+        if env is None:
+            env = BackgammonEnv()
+        super().__init__(env)
+        self.ai = BackgammonAI(self.env)
         self.root.title("Backgammon - Joueur vs IA")
-        
-        # Zone du plateau (board) en haut
-        self.canvas = tk.Canvas(self.root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT)
-        self.canvas.pack()
-        self.board = Board(self.canvas)
-        self.selected_point = None
-        self.valid_destinations = []
-        self.remaining_dice = []
-        
-        # Ligne de séparation (exemple d'une ligne bleue)
-        separator = tk.Frame(self.root, height=2, bg="blue")
-        separator.pack(fill=tk.X, pady=5)
-        
-        # Zone d'actions en bas
-        self.action_frame = tk.Frame(self.root)
-        self.action_frame.pack(pady=5)
-        
-        self.info_label = tk.Label(self.action_frame, text="Cliquez sur 'Lancer les dés' pour commencer.", font=("Arial", 12))
-        self.info_label.grid(row=0, column=0, columnspan=3, pady=5)
-        
-        self.dice_label = tk.Label(self.action_frame, text="Dés: []", font=("Arial", 12))
-        self.dice_label.grid(row=1, column=0, columnspan=3, pady=5)
-        
-        self.roll_button = tk.Button(self.action_frame, text="Lancer les dés", command=self.roll_dice, font=("Arial", 12))
-        self.roll_button.grid(row=2, column=0, padx=5, pady=5)
-        
-        self.pass_button = tk.Button(self.action_frame, text="Passer", command=self.pass_turn, font=("Arial", 12))
-        self.pass_button.grid(row=2, column=1, padx=5, pady=5)
-        
-        self.reset_button = tk.Button(self.action_frame, text="Nouvelle partie", command=self.reset_game, font=("Arial", 12))
-        self.reset_button.grid(row=2, column=2, padx=5, pady=5)
-        
-        self.moves_listbox = tk.Listbox(self.action_frame, height=6, width=50)
-        self.moves_listbox.grid(row=3, column=0, columnspan=3, pady=5)
-        
-        self.play_button = tk.Button(self.action_frame, text="Jouer ce coup", command=self.play_move, font=("Arial", 12))
-        self.play_button.grid(row=4, column=0, columnspan=3, pady=5)
-        
-        self.history_label = tk.Label(self.action_frame, text="Historique des coups:", font=("Arial", 12))
-        self.history_label.grid(row=5, column=0, columnspan=3, pady=(10,0))
-        
-        self.history_text = scrolledtext.ScrolledText(self.action_frame, width=60, height=10, font=("Arial", 10))
-        self.history_text.grid(row=6, column=0, columnspan=3, pady=5)
-        self.history_text.insert(tk.END, "Historique des coups:\n")
-        self.history_text.config(state="disabled")
-        
-        # Lier le clic sur le canvas (pour l'humain)
-        self.canvas.bind("<Button-1>", self.on_canvas_click)
-        self.update_board()
 
     def roll_dice(self):
-        self.remaining_dice = self.env.roll_dice()
-        self.info_label.config(text=f"Résultat des dés: {self.remaining_dice}")
-        self.dice_label.config(text=f"Dés: {self.remaining_dice}")
-        self.update_valid_moves()
-        self.selected_point = None
-        self.valid_destinations = []
-        self.update_board()
-        # Si c'est le tour de l'IA, lancer l'IA après un court délai
+        """Lance les dés et démarre le tour de l'IA si c'est son tour"""
+        super().roll_dice()
         if self.env.current_player == 1:
-            self.root.after(1000, self.ai_move)
-            
-    def update_valid_moves(self):
-        self.valid_moves = self.env.valid_moves(self.remaining_dice)
-        self.moves_listbox.delete(0, tk.END)
-        for move in self.valid_moves:
-            self.moves_listbox.insert(tk.END, f"{move[0]} → {move[1]} (dé: {move[2]})")
-        if not self.valid_moves:
-            messagebox.showinfo("Info", "Aucun coup possible. Passage automatique au joueur suivant.")
-            self.pass_turn()
+            self.root.after(500, self.ai_turn)
 
-    def play_move(self):
-        # Cette fonction est uniquement pour l'humain (Joueur 1)
-        if self.env.current_player != 0:
-            return  # Ignore si ce n'est pas le tour de l'humain
-        selected = self.moves_listbox.curselection()
-        if not selected:
-            messagebox.showwarning("Attention", "Sélectionnez un mouvement.")
-            return
-        move_text = self.moves_listbox.get(selected[0])
-        parts = move_text.split(" → ")
-        src = int(parts[0])
-        dest = int(parts[1].split(" (")[0])
-        die_used = int(parts[1].split(": ")[1].replace(")", ""))
-        
-        subset = find_subset(self.remaining_dice, die_used)
-        if subset is None:
-            messagebox.showerror("Erreur", "Combinaison de dés invalide.")
-            return
-
-        success, win = self.env.step_move(src, dest, die_used)
-        if not success:
-            messagebox.showerror("Erreur", "Mouvement invalide.")
-            return
-
-        for d in subset:
-            self.remaining_dice.remove(d)
-
-        self.update_board()
-        self.update_valid_moves()
-        self.update_history()
-
-        if win:
-            messagebox.showinfo("Victoire", f"Félicitations, Joueur a gagné !")
-            self.root.quit()
-            return
-
+    def ai_turn(self):
         if not self.remaining_dice:
-            self.pass_turn()
-
-    def ai_move(self):
-        # Fonction simple de l'IA : choisir aléatoirement un mouvement valide
-        self.update_valid_moves()
-        if not self.valid_moves:
-            self.pass_turn()
             return
-        move = random.choice(self.valid_moves)
-        src, dest, die_used = move
-        subset = find_subset(self.remaining_dice, die_used)
-        if subset is None:
-            self.pass_turn()
-            return
-        for d in subset:
-            self.remaining_dice.remove(d)
-        success, win = self.env.step_move(src, dest, die_used)
-        self.info_label.config(text=f"L'IA a joué : {src} → {dest} (dé: {die_used})")
-        self.update_board()
-        self.update_valid_moves()
-        self.update_history()
-        if win:
-            messagebox.showinfo("Victoire", "L'IA a gagné !")
-            self.root.quit()
-            return
-        if not self.remaining_dice:
-            self.pass_turn()
-        else:
-            # Si l'IA a encore des dés à jouer, continuer après un délai
-            self.root.after(1000, self.ai_move)
 
-    def pass_turn(self):
-        self.env.current_player = 1 - self.env.current_player
-        self.info_label.config(text=f"Tour de Joueur {self.env.current_player + 1}. Cliquez sur 'Lancer les dés'.")
-        self.remaining_dice = []
-        self.dice_label.config(text="Dés: []")
-        self.selected_point = None
-        self.valid_destinations = []
-        self.update_valid_moves()
-        self.update_board()
-        # Si c'est l'IA qui commence le tour, lancer l'IA automatiquement
-        if self.env.current_player == 1:
-            self.root.after(1000, self.ai_move)
+        try:
+            # Tant qu'il reste des dés et des mouvements valides
+            while self.remaining_dice and self.valid_moves:
+                move = self.ai.ai_move(self.valid_moves, self.remaining_dice)
+                if not move:
+                    break
+                    
+                src, dest, die_used = move
+                subset = find_subset(self.remaining_dice, die_used)
+                if not subset:
+                    continue
 
-    def reset_game(self):
-        self.env.reset()
-        self.env.current_player = 0
-        self.remaining_dice = []
-        self.selected_point = None
-        self.valid_destinations = []
-        self.history_text.config(state="normal")
-        self.history_text.delete("1.0", tk.END)
-        self.history_text.insert(tk.END, "Historique des coups:\n")
-        self.history_text.config(state="disabled")
-        self.info_label.config(text="Nouvelle partie. Cliquez sur 'Lancer les dés'.")
-        self.dice_label.config(text="Dés: []")
-        self.update_valid_moves()
-        self.update_board()
+                for d in subset:
+                    self.remaining_dice.remove(d)
 
-    def update_board(self):
-        self.triangles_bbox = self.board.draw(self.env, self.selected_point, self.valid_destinations)
+                success, win = self.env.step_move(src, dest, die_used)
+                if success:
+                    self.info_label.config(text=f"L'IA a joué : {src} → {dest}")
+                    self.update_board()
+                    self.update_valid_moves()
+                    
+                    if win:
+                        messagebox.showinfo("Victoire", "L'IA a gagné !")
+                        self.root.quit()
+                        return
 
-    def update_history(self):
-        self.history_text.config(state="normal")
-        self.history_text.delete("1.0", tk.END)
-        self.history_text.insert(tk.END, self.env.historique.to_string(index=False))
-        self.history_text.config(state="disabled")
+        finally:
+            if self.remaining_dice:
+                self.pass_turn()
+            else:
+                self.env.current_player = 0
+                self.update_valid_moves()
 
     def on_canvas_click(self, event):
-        # Cette fonction ne s'active que si c'est le tour de l'humain (Joueur 1)
-        if self.env.current_player != 0:
+        if self.env.current_player == 1:  # Ignore les clics pendant le tour de l'IA
             return
-        point_clicked = self.point_from_click(event.x, event.y)
-        if point_clicked is None:
-            self.selected_point = None
-            self.valid_destinations = []
-            self.info_label.config(text="Sélection annulée.")
-            self.update_board()
-            return
-
-        idx = point_clicked - 1
-        if self.selected_point is None:
-            if self.env.board[idx, 0] > 0:
-                self.selected_point = point_clicked
-                self.valid_destinations = [m[1] for m in self.valid_moves if m[0] == point_clicked]
-                self.info_label.config(text=f"Point {point_clicked} sélectionné. Destinations: {self.valid_destinations}.")
-            else:
-                self.info_label.config(text="Ce point ne contient pas de pion sélectionnable.")
-        else:
-            if point_clicked in self.valid_destinations:
-                move = next((m for m in self.valid_moves if m[0] == self.selected_point and m[1] == point_clicked), None)
-                if move:
-                    src, dest, die_used = move
-                    success, win = self.env.step_move(src, dest, die_used)
-                    if success:
-                        subset = find_subset(self.remaining_dice, die_used)
-                        if subset:
-                            for d in subset:
-                                self.remaining_dice.remove(d)
-                        self.info_label.config(text=f"Mouvement: {src} → {dest} (dé: {die_used}).")
-                        self.update_history()
-                        self.selected_point = None
-                        self.valid_destinations = []
-                        self.update_valid_moves()
-                        self.dice_label.config(text=f"Dés: {self.remaining_dice}")
-                        if not self.remaining_dice:
-                            self.pass_turn()
-                    else:
-                        self.info_label.config(text="Mouvement invalide.")
-            else:
-                idx2 = point_clicked - 1
-                if self.env.board[idx2, 0] > 0:
-                    self.selected_point = point_clicked
-                    self.valid_destinations = [m[1] for m in self.valid_moves if m[0] == point_clicked]
-                    self.info_label.config(text=f"Nouvelle sélection: point {point_clicked}. Destinations: {self.valid_destinations}.")
-                else:
-                    self.selected_point = None
-                    self.valid_destinations = []
-                    self.info_label.config(text="Sélection annulée.")
-        self.update_board()
-
-    def point_from_click(self, x, y):
-        for point, data in self.triangles_bbox.items():
-            x1, y1, x2, y2 = data["bbox"]
-            if x1 <= x <= x2 and y1 <= y <= y2:
-                return point
-        return None
-
-    def run(self):
-        self.root.mainloop()
+        super().on_canvas_click(event)
 
 if __name__ == '__main__':
     app = BackgammonGUI_AI()
